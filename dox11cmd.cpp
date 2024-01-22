@@ -61,9 +61,10 @@ int main(int argc, char **argv) {
     }
 
     // Get global Display.
-    mDisplay = XOpenDisplay(":0");
+    mDisplay = XOpenDisplay(":1.0");
     if (!mDisplay) {
-        fprintf(stdout, "Cannot open X11 display ?? FATAL.\n");
+        fprintf(stdout, "dox11cmd: Can\'t open default display ... ");
+        fprintf(stdout, "FATAL.\n");
         exit(1);
     }
 
@@ -99,14 +100,25 @@ int main(int argc, char **argv) {
  ** Display useage (All Supported Commands).
  **/
 void doDisplayUseage() {
-    cout << "\nUseage: dox11cmd commmand windowName." << endl << endl;
+    cout << "\nUseage: dox11cmd CMD WINDOW" << endl << endl;
 
-    cout << "Available commands are: " << endl << endl;
+    cout << "CMDs are: " << endl << endl;
+
+    cout << "   list" << endl;
+    cout << "   map WINDOW" << endl;
+    cout << "   map WINDOW" << endl;
+    cout << "   map WINDOW" << endl;
+    cout << "   map WINDOW" << endl;
+    cout << "   swap WINDOW WINDOW_UNDER" << endl << endl;
+
     for (auto thisCmd = mCmdListStrings.begin();
         thisCmd != mCmdListStrings.end(); ++thisCmd){
         cout << *thisCmd << "  ";
     }
     cout << "\n" << endl;
+
+    cout << "WINDOWs are: Requested by a portion of their TitleBar "
+        "string." << endl;
 }
 
 /** *********************************************************************
@@ -116,12 +128,12 @@ void doListStackedWindowNames() {
     Window* stackedWins;
     int numberOfStackedWins = getX11StackedWindowsList(&stackedWins);
 
-    cout << "Available Windows in Stacked Order above desktop:\n" << endl;
+    cout << "\nWindows in Stacked Order above desktop:" << endl;
     for (int i = numberOfStackedWins - 1; i >= 0; i--) {
         XTextProperty titleBarName;
         XGetWMName(mDisplay, stackedWins[i], &titleBarName);
 
-        fprintf(stdout, "wmctrl: [window: 0x%08lx]   windowName: %s\n",
+        fprintf(stdout, "window:  [0x%08lx]  windowName: %s\n",
             stackedWins[i], titleBarName.value);
 
         XFree(titleBarName.value);
@@ -134,14 +146,15 @@ void doListStackedWindowNames() {
 void doRaiseWindow(string argString) {
     Window window = getWindowMatchName(argString);
     if (!window) {
-        fprintf(stdout, "\nCannot find a Window by that name.\n");
+        fprintf(stdout, "\ndox11cmd: Cannot find a Window "
+            "by that name.\n");
         doListStackedWindowNames();
         return;
     }
 
     if(!XRaiseWindow(mDisplay, window)) {
-        fprintf(stdout, "Error encountered trying to raise "
-            "the Window ?? FATAL.\n");
+        fprintf(stdout, "dox11cmd: Error encountered trying to "
+            "raise the Window ?? FATAL.\n");
         return;
     }
 }
@@ -152,7 +165,8 @@ void doRaiseWindow(string argString) {
 void doLowerWindow(string argString) {
     Window window = getWindowMatchName(argString);
     if (!window) {
-        fprintf(stdout, "\nCannot find a Window by that name.\n");
+        fprintf(stdout, "\ndox11cmd: Cannot find a Window "
+            "by that name.\n");
         doListStackedWindowNames();
         return;
     }
@@ -166,7 +180,8 @@ void doLowerWindow(string argString) {
             continue;
         }
         if (!XRaiseWindow(mDisplay, stackedWins[i])) {
-            fprintf(stdout, "Error trying to lower the Window.\n");
+            fprintf(stdout, "dox11cmd: Error trying to "
+                "lower the Window.\n");
             return;
         }
     }
@@ -178,14 +193,15 @@ void doLowerWindow(string argString) {
 void doMapWindow(string argString) {
     Window window = getWindowMatchName(argString);
     if (!window) {
-        fprintf(stdout, "\nCannot find a Window by that name.\n");
+        fprintf(stdout, "\ndox11cmd: Cannot find a Window "
+            "by that name.\n");
         doListStackedWindowNames();
         return;
     }
 
     if(!XMapWindow(mDisplay, window)) {
-        fprintf(stdout, "Error encountered trying to map "
-            "the Window ?? FATAL.\n");
+        fprintf(stdout, "dox11cmd: Error encountered trying to "
+            "map the Window ?? FATAL.\n");
         return;
     }
 }
@@ -196,14 +212,15 @@ void doMapWindow(string argString) {
 void doUnmapWindow(string argString) {
     Window window = getWindowMatchName(argString);
     if (!window) {
-        fprintf(stdout, "\nCannot find a Window by that name.\n");
+        fprintf(stdout, "\ndox11cmd: Cannot find a Window "
+            "by that name.\n");
         doListStackedWindowNames();
         return;
     }
 
     if(!XUnmapWindow(mDisplay, window)) {
-        fprintf(stdout, "Error encountered trying to unmap "
-            "the Window ?? FATAL.\n");
+        fprintf(stdout, "dox11cmd: Error encountered trying to "
+            "unmap the Window ?? FATAL.\n");
         return;
     }
 }
