@@ -10,8 +10,8 @@ all:
 	@echo "Build starts ..."
 	@echo
 
-	g++ -Wall -ansi -g -m64 -std=c++17 -c dox11cmd.cpp
-	g++ dox11cmd.o -m64 -L/usr/lib/x86_64-linux-gnu -lX11 -o dox11cmd
+	g++ -Wall -ansi -g -m64 -std=c++11 -c dox11cmd.cpp
+	g++ dox11cmd.o -m64 -L/usr/lib/x86_64-linux-gnu -lX11 -lxcb -lX11-xcb -o dox11cmd
 
 	@echo
 	@echo "Build Done !"
