@@ -129,8 +129,9 @@ int main(int argc, char **argv) {
             break;
 
         default:
-            cout << "\ndox11cmd: That\'s not a valid VERB." << endl;
+            cout << "\033[33;1m\ndox11cmd: That\'s not a valid VERB.\033[0m" << endl;
             doDisplayUseage();
+            doListStackedWindowNames();
     }
 
     XCloseDisplay(mDisplay);
@@ -140,16 +141,17 @@ int main(int argc, char **argv) {
  ** Display useage (All Supported Commands).
  **/
 void doDisplayUseage() {
-    cout << "\nUseage: dox11cmd VERB WINDOW" << endl << endl;
+    cout << "\033[34;1m\nUseage: dox11cmd VERB [WINDOW]\033[0m"
+        << endl << endl;
 
-    cout << "VERBs are: " << endl << endl;
-    cout << "   list" << endl;
-    cout << "   raise WINDOW" << endl;
-    cout << "   lower WINDOW" << endl;
-    cout << "   map WINDOW" << endl;
-    cout << "   unmap WINDOW" << endl;
-
-    cout << "\nWINDOWs are: Requested by a portion of their "
+    cout << "   VERBs are: " << endl << endl;
+    cout << "      list" << endl;
+    cout << "      raise WINDOW" << endl;
+    cout << "      lower WINDOW" << endl;
+    cout << "      map WINDOW" << endl;
+    cout << "      unmap WINDOW" << endl;
+    cout << endl;
+    cout << "   WINDOWs are: Requested by a portion of their "
         "TitleBar name." << endl;
 }
 
@@ -157,10 +159,11 @@ void doDisplayUseage() {
  ** Supported Commands - list.
  **/
 void doListStackedWindowNames() {
+    cout << "\033[34;1m\nWindows in Stacked Order "
+        "above Desktop:\033[0m" << endl;
+
     Window* stackedWins;
     int numberOfStackedWins = getX11StackedWindowsList(&stackedWins);
-
-    cout << "\nWindows in Stacked Order above desktop:" << endl;
 
     for (int i = numberOfStackedWins - 1; i >= 0; i--) {
         WinInfo* winInfoItem = (WinInfo*) malloc(sizeof(WinInfo));
@@ -196,8 +199,8 @@ void doListStackedWindowNames() {
 void doRaiseWindow(string windowString) {
     Window window = getWindowMatchName(windowString);
     if (!window) {
-        fprintf(stdout, "\ndox11cmd: Cannot find a Window "
-            "by that name.\n");
+        cout << "\033[33;1m\ndox11cmd: Cannot find a Window "
+            "by that name.\033[0m" << endl;
         return;
     }
 
@@ -214,8 +217,8 @@ void doRaiseWindow(string windowString) {
 void doLowerWindow(string windowString) {
     Window window = getWindowMatchName(windowString);
     if (!window) {
-        fprintf(stdout, "\ndox11cmd: Cannot find a Window "
-            "by that name.\n");
+        cout << "\033[33;1m\ndox11cmd: Cannot find a Window "
+            "by that name.\033[0m" << endl;
         return;
     }
 
@@ -241,8 +244,8 @@ void doLowerWindow(string windowString) {
 void doMapWindow(string windowString) {
     Window window = getWindowMatchName(windowString);
     if (!window) {
-        fprintf(stdout, "\ndox11cmd: Cannot find a Window "
-            "by that name.\n");
+        cout << "\033[33;1m\ndox11cmd: Cannot find a Window "
+            "by that name.\033[0m" << endl;
         return;
     }
 
@@ -259,8 +262,8 @@ void doMapWindow(string windowString) {
 void doUnmapWindow(string windowString) {
     Window window = getWindowMatchName(windowString);
     if (!window) {
-        fprintf(stdout, "\ndox11cmd: Cannot find a Window "
-            "by that name.\n");
+        cout << "\033[33;1m\ndox11cmd: Cannot find a Window "
+            "by that name.\033[0m" << endl;
         return;
     }
 
@@ -509,6 +512,35 @@ Bool isWindow_Hidden(Window window, int windowMapState) {
 }
 
 /** *********************************************************************
+ ** This method ...
+ **/
+Bool isDesktop_Visible() {
+    Bool result = true;
+
+    Atom type;
+    int format;
+    unsigned long nitems, unusedBytes;
+    unsigned char *properties = NULL;
+
+    XGetWindowProperty(mDisplay, DefaultRootWindow(mDisplay),
+        XInternAtom(mDisplay, "_NET_SHOWING_DESKTOP", False),
+        0, (~0L), False, AnyPropertyType, &type, &format,
+        &nitems, &unusedBytes, &properties);
+
+    if (format == 32 && nitems >= 1) {
+        if (*(long *) (void *) properties == 1) {
+            result = false;
+        }
+    }
+
+    if (properties) {
+        XFree(properties);
+    }
+
+    return result;
+}
+
+/** *********************************************************************
  ** This method checks "_NET_WM_STATE" for window HIDDEN attribute.
  **/
 Bool isNetWM_Hidden(Window window) {
@@ -578,31 +610,3 @@ Bool isWM_Hidden(Window window) {
     return result;
 }
 
-/** *********************************************************************
- ** This method ...
- **/
-Bool isDesktop_Visible() {
-    Bool result = false;
-
-    Atom type;
-    int format;
-    unsigned long nitems, unusedBytes;
-    unsigned char *properties = NULL;
-
-    XGetWindowProperty(mDisplay, DefaultRootWindow(mDisplay),
-        XInternAtom(mDisplay, "_NET_SHOWING_DESKTOP", False),
-        0, (~0L), False, AnyPropertyType, &type, &format,
-        &nitems, &unusedBytes, &properties);
-
-    if (format == 32 && nitems >= 1) {
-        if (*(long *) (void *) properties != 1) {
-            result = true;
-        }
-    }
-
-    if (properties) {
-        XFree(properties);
-    }
-
-    return result;
-}
