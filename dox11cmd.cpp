@@ -21,25 +21,25 @@ using namespace std;
 #include <vector>
 #include <algorithm>
 
-
-/***********************************************************
- * App Window helper objects.
- */
+/** *********************************************************************
+ ** Module global type defs.
+ **/
 typedef struct _WinInfo {
-        Window id;
+        Window id;         // id.
+        long ws;           // workspace.
 
-        int x, y; // x,y coordinates
-        int xa, ya; // x,y coordinates absolute
+        Bool sticky;       // visible on all workspaces?
+        Bool dock;         // is a "dock" (panel)?
+        Bool hidden;       // is hidden / iconized?
 
-        unsigned int w, h; // width, height
-        long ws; // workspace
-
-        Bool sticky; // is visible on all workspaces
-        Bool dock; // is a "dock" (panel)
-        Bool hidden; // is hidden / iconized
+        int x, y;          // x,y coordinates.
+        int xa, ya;        // x,y coordinates absolute.
+        unsigned int w, h; // width, height.
 } WinInfo;
 
-
+/***********************************************************
+ * Module Method stubs.
+ */
 // Forward declare helpers.
 void doDisplayUseage();
 
@@ -66,6 +66,9 @@ Bool isDesktop_Visible();
 Bool isNetWM_Hidden(Window window);
 Bool isWM_Hidden(Window window);
 
+/** *********************************************************************
+ ** Module globals and consts.
+ **/
 
 // Pattern for string switch-statement.
 vector<string> mCmdListStrings {
@@ -73,13 +76,11 @@ vector<string> mCmdListStrings {
 enum M_COMMAND_STRING {
     LIST, RAISE, LOWER, MAP, UNMAP};
 
-// Global vars.
 string mCmdString = "";
 string mWindow = "";
 string mAltWindow = "";
 
 Display* mDisplay;
-
 
 /** *********************************************************************
  ** Module Entry.
@@ -159,36 +160,52 @@ void doDisplayUseage() {
  ** Supported Commands - list.
  **/
 void doListStackedWindowNames() {
-    cout << "\033[34;1m\nWindows in Stacked Order "
+    cout << "\033[44;1m\nWindows in Stacked Order "
         "above Desktop:\033[0m" << endl;
 
     Window* stackedWins;
     int numberOfStackedWins = getX11StackedWindowsList(&stackedWins);
 
     for (int i = numberOfStackedWins - 1; i >= 0; i--) {
-        WinInfo* winInfoItem = (WinInfo*) malloc(sizeof(WinInfo));
-
-        winInfoItem->id = stackedWins[i];
-        winInfoItem->ws = getWindowWorkspace(stackedWins[i]);
-        winInfoItem->sticky = isWindow_Sticky(winInfoItem->ws, winInfoItem);
-        winInfoItem->dock = isWindow_Dock(winInfoItem);
-
         XWindowAttributes windowAttributes;
         XGetWindowAttributes(mDisplay, stackedWins[i], &windowAttributes);
 
-        winInfoItem->hidden = isWindow_Hidden(stackedWins[i],
-            windowAttributes.map_state);
-        winInfoItem->w = windowAttributes.width;
-        winInfoItem->h = windowAttributes.height;
+        int xRelative;
+        int yRelative;
+        Window child_return;
+        XTranslateCoordinates(mDisplay, stackedWins[i],
+            DefaultRootWindow(mDisplay), 0, 0, &xRelative, &yRelative,
+            &child_return);
 
         XTextProperty titleBarName;
         XGetWMName(mDisplay, stackedWins[i], &titleBarName);
 
-        fprintf(stdout, "window: [0x%08lx]  ws: %2li  dock: %d  "
-            "sticky: %d  hidden: %d  windowName: %s\n",
-            winInfoItem->id, winInfoItem->ws, winInfoItem->dock,
-            winInfoItem->sticky, winInfoItem->hidden, titleBarName.value);
+        // Create a WinInfo struct.
+        WinInfo* winInfoItem = (WinInfo*)
+            malloc(sizeof(WinInfo));
 
+        winInfoItem->id = stackedWins[i];
+        winInfoItem->ws = getWindowWorkspace(stackedWins[i]);
+
+        winInfoItem->sticky = isWindow_Sticky(winInfoItem->ws, winInfoItem);
+        winInfoItem->dock = isWindow_Dock(winInfoItem);
+        winInfoItem->hidden = isWindow_Hidden(stackedWins[i],
+            windowAttributes.map_state);
+
+        winInfoItem->x = windowAttributes.x;
+        winInfoItem->y = windowAttributes.y;
+
+        winInfoItem->xa = xRelative - winInfoItem->x;
+        winInfoItem->ya = yRelative - winInfoItem->y;
+
+        winInfoItem->w = windowAttributes.width;
+        winInfoItem->h = windowAttributes.height;
+
+        fprintf(stdout, "window: [0x%08lx]  ws: %2li  dock: %d  "
+            "sticky: %d  hidden: %d  x: %8d  y: %8d  %s\n",
+            winInfoItem->id, winInfoItem->ws, winInfoItem->dock,
+            winInfoItem->sticky, winInfoItem->hidden,
+            winInfoItem->xa, winInfoItem->ya, titleBarName.value);
         XFree(titleBarName.value);
     }
 }
@@ -451,7 +468,8 @@ Bool isWindow_Sticky(long workSpace, WinInfo* winInfoItem) {
 }
 
 /** *********************************************************************
- ** This method ...
+ ** This method checks for a _NET_WM_WINDOW_TYPE of
+ ** _NET_WM_WINDOW_TYPE_DOCK.
  **/
 Bool isWindow_Dock(WinInfo* winInfoItem) {
     Bool result = false;
@@ -512,7 +530,7 @@ Bool isWindow_Hidden(Window window, int windowMapState) {
 }
 
 /** *********************************************************************
- ** This method ...
+ ** This method checks for window _NET_SHOWING_DESKTOP property.
  **/
 Bool isDesktop_Visible() {
     Bool result = true;
@@ -609,4 +627,3 @@ Bool isWM_Hidden(Window window) {
 
     return result;
 }
-
