@@ -390,7 +390,7 @@ getRootWindowProperty(Atom property, Window** windows) {
  ** This method determines if a window is visible on a workspace.
  **/
 long int getWindowWorkspace(Window window) {
-    Bool result = 0;
+    long int result = 0;
 
     Atom type;
     int format;
