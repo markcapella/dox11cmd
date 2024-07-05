@@ -1,28 +1,25 @@
-/** *********************************************************************
+/** ********************************************************
  ** Main dox11cmd.
  **/
 
-#include <X11/Xos.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include <X11/Xatom.h>
-
-#include <X11/Xlib-xcb.h>
-
-#include <stdlib.h>
-#include <unistd.h>
-
-#include <stdio.h>
+#include <algorithm>
 #include <iostream>
-
+#include <stdio.h>
+#include <stdlib.h>
 #include <string>
+#include <unistd.h>
+#include <vector>
+
+#include <X11/Xatom.h>
+#include <X11/Xlib.h>
+#include <X11/Xos.h>
+#include <X11/Xutil.h>
+
 using namespace std;
 
-#include <vector>
-#include <algorithm>
 
-/** *********************************************************************
- ** Module global type defs.
+/** ********************************************************
+ ** Wininfo object.
  **/
 typedef struct _WinInfo {
         Window id;         // id.
@@ -37,7 +34,7 @@ typedef struct _WinInfo {
         unsigned int w, h; // width, height.
 } WinInfo;
 
-/***********************************************************
+/** ********************************************************
  * Module Method stubs.
  */
 // Forward declare helpers.
@@ -50,9 +47,9 @@ void doLowerWindow(string);
 void doMapWindow(string);
 void doUnmapWindow(string);
 
-Window getWindowMatchName(string);
-Window getWindowNameMatchExact(string name);
-Window getWindowNameMatchPartial(string name);
+Window getWindowWithBestName(string);
+Window getWindowWithExactName(string name);
+Window getWindowWithPartialName(string name);
 
 unsigned long getX11StackedWindowsList(Window**);
 unsigned long getRootWindowProperty(Atom, Window**);
@@ -66,9 +63,21 @@ Bool isDesktop_Visible();
 Bool isNetWM_Hidden(Window window);
 Bool isWM_Hidden(Window window);
 
-/** *********************************************************************
+int handleX11ErrorEvent(Display*, XErrorEvent*);
+
+
+/** ********************************************************
  ** Module globals and consts.
  **/
+
+// Minor styling.
+#define COLOR_RED "\033[0;31m"
+#define COLOR_GREEN "\033[1;32m"
+#define COLOR_YELLOW "\033[1;33m"
+#define COLOR_BLUE "\033[1;34m"
+#define COLOR_NORMAL "\033[0m"
+
+#define MAX_CHARS_FOR_TITLE_DISPLAY 35
 
 // Pattern for string switch-statement.
 vector<string> mCmdListStrings {
@@ -82,7 +91,8 @@ string mAltWindow = "";
 
 Display* mDisplay;
 
-/** *********************************************************************
+
+/** ********************************************************
  ** Module Entry.
  **/
 int main(int argc, char **argv) {
@@ -97,15 +107,19 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Get global Display.
+    // X11 Initialization.
     mDisplay = XOpenDisplay(NULL);
     if (!mDisplay) {
-        fprintf(stdout, "dox11cmd: Can\'t open default display ... ");
-        fprintf(stdout, "FATAL.\n");
+        cout << COLOR_RED <<
+            "\ndox11cmd: X11 Does not seem to be available." <<
+            COLOR_NORMAL << endl;
         exit(1);
     }
 
-    // String switch on users command.
+    XSynchronize(mDisplay, 0);
+    XSetErrorHandler(handleX11ErrorEvent);
+
+    // Execute users command.
     switch (distance(mCmdListStrings.begin(),
             find(mCmdListStrings.begin(), mCmdListStrings.end(),
         mCmdString))) {
@@ -130,7 +144,9 @@ int main(int argc, char **argv) {
             break;
 
         default:
-            cout << "\033[33;1m\ndox11cmd: That\'s not a valid VERB.\033[0m" << endl;
+            cout << COLOR_YELLOW <<
+                "\ndox11cmd: That\'s not a valid VERB." <<
+                COLOR_NORMAL << endl;
             doDisplayUseage();
             doListStackedWindowNames();
     }
@@ -138,57 +154,75 @@ int main(int argc, char **argv) {
     XCloseDisplay(mDisplay);
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** Display useage (All Supported Commands).
  **/
 void doDisplayUseage() {
-    cout << "\033[34;1m\nUseage: dox11cmd VERB [WINDOW]\033[0m"
-        << endl << endl;
+    cout << COLOR_BLUE <<
+        "\nUseage: dox11cmd VERB [WINDOW]" <<
+        COLOR_NORMAL << endl << endl;
 
-    cout << "   VERBs are: " << endl << endl;
+    cout << COLOR_GREEN << "   VERBs are:" <<
+        COLOR_NORMAL << endl << endl;
+
     cout << "      list" << endl;
     cout << "      raise WINDOW" << endl;
     cout << "      lower WINDOW" << endl;
     cout << "      map WINDOW" << endl;
     cout << "      unmap WINDOW" << endl;
     cout << endl;
-    cout << "   WINDOWs are: Requested by a portion of their "
-        "TitleBar name." << endl;
+
+    cout << COLOR_GREEN << "   WINDOWs are:" << COLOR_NORMAL <<
+        endl << endl << "      Requested by a portion of their "
+        "TitleBar Name." << endl;
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** Supported Commands - list.
  **/
 void doListStackedWindowNames() {
-    cout << "\033[44;1m\nWindows in Stacked Order "
-        "above Desktop:\033[0m" << endl;
+    cout << endl << COLOR_BLUE << "\nWindows in Stacked Order "
+        "above Desktop:" << COLOR_NORMAL << endl;
+
+    cout << COLOR_GREEN << "\n---window---  Titlebar Name"
+        "                             WS   "
+        "---Position-- -----Size----  Attributes" <<
+        COLOR_NORMAL << endl;
 
     Window* stackedWins;
-    int numberOfStackedWins = getX11StackedWindowsList(&stackedWins);
+    int numberOfStackedWins =
+        getX11StackedWindowsList(&stackedWins);
 
     for (int i = numberOfStackedWins - 1; i >= 0; i--) {
         XWindowAttributes windowAttributes;
-        XGetWindowAttributes(mDisplay, stackedWins[i], &windowAttributes);
+        XGetWindowAttributes(mDisplay, stackedWins[i],
+            &windowAttributes);
 
         int xRelative;
         int yRelative;
         Window child_return;
         XTranslateCoordinates(mDisplay, stackedWins[i],
-            DefaultRootWindow(mDisplay), 0, 0, &xRelative, &yRelative,
-            &child_return);
+            DefaultRootWindow(mDisplay), 0, 0, &xRelative,
+            &yRelative, &child_return);
 
         XTextProperty titleBarName;
         XGetWMName(mDisplay, stackedWins[i], &titleBarName);
+        string formattedTitle((char*) titleBarName.value,
+            MAX_CHARS_FOR_TITLE_DISPLAY);
 
         // Create a WinInfo struct.
         WinInfo* winInfoItem = (WinInfo*)
             malloc(sizeof(WinInfo));
 
         winInfoItem->id = stackedWins[i];
+
         winInfoItem->ws = getWindowWorkspace(stackedWins[i]);
 
-        winInfoItem->sticky = isWindow_Sticky(winInfoItem->ws, winInfoItem);
+        winInfoItem->sticky = isWindow_Sticky(winInfoItem->ws,
+            winInfoItem);
+
         winInfoItem->dock = isWindow_Dock(winInfoItem);
+
         winInfoItem->hidden = isWindow_Hidden(stackedWins[i],
             windowAttributes.map_state);
 
@@ -201,46 +235,51 @@ void doListStackedWindowNames() {
         winInfoItem->w = windowAttributes.width;
         winInfoItem->h = windowAttributes.height;
 
-        fprintf(stdout, "window: [0x%08lx]  ws: %2li  dock: %d  "
-            "sticky: %d  hidden: %d  x: %8d  y: %8d  %s\n",
-            winInfoItem->id, winInfoItem->ws, winInfoItem->dock,
-            winInfoItem->sticky, winInfoItem->hidden,
-            winInfoItem->xa, winInfoItem->ya, titleBarName.value);
+        fprintf(stdout, "[0x%08lx]  %-40s  %2li  "
+            " %5d , %-5d %5d x %-5d  %s%s%s\n",
+            winInfoItem->id, formattedTitle.c_str(),
+            winInfoItem->ws,
+            winInfoItem->xa, winInfoItem->ya,
+            winInfoItem->w, winInfoItem->h,
+            winInfoItem->dock ? "dock " : "",
+            winInfoItem->sticky ? "sticky " : "",
+            winInfoItem->hidden ? "hidden" : "");
+
         XFree(titleBarName.value);
     }
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** Supported Commands - raise.
  **/
 void doRaiseWindow(string windowString) {
-    Window window = getWindowMatchName(windowString);
+    Window window = getWindowWithBestName(windowString);
     if (!window) {
-        cout << "\033[33;1m\ndox11cmd: Cannot find a Window "
-            "by that name.\033[0m" << endl;
+        cout << COLOR_RED << "\ndox11cmd: Cannot find a Window "
+            "by that name." << COLOR_NORMAL << endl;
         return;
     }
 
     if(!XRaiseWindow(mDisplay, window)) {
-        fprintf(stdout, "dox11cmd: Error encountered trying to "
-            "raise the Window ?? FATAL.\n");
+        cout << COLOR_RED << "dox11cmd: Error encountered trying to "
+            "raise the Window ?? FATAL." << COLOR_NORMAL << endl;
         return;
     }
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** Supported Commands - lower.
  **/
 void doLowerWindow(string windowString) {
-    Window window = getWindowMatchName(windowString);
+    Window window = getWindowWithBestName(windowString);
     if (!window) {
-        cout << "\033[33;1m\ndox11cmd: Cannot find a Window "
-            "by that name.\033[0m" << endl;
+        cout << COLOR_RED << "\ndox11cmd: Cannot find a Window "
+            "by that name." << COLOR_NORMAL << endl;
         return;
     }
 
     // Lower target, by raising all other windows above it.
-    // Ignore Desktop @ [0].
+    // Ignore desktop @ [0].
     Window* stackedWins;
     int numberOfStackedWins = getX11StackedWindowsList(&stackedWins);
     for (int i = 1; i < numberOfStackedWins; i++) {
@@ -248,65 +287,65 @@ void doLowerWindow(string windowString) {
             continue;
         }
         if (!XRaiseWindow(mDisplay, stackedWins[i])) {
-            fprintf(stdout, "dox11cmd: Error trying to "
-                "lower the Window.\n");
+            cout << COLOR_RED << "dox11cmd: Error trying to "
+                "lower the Window." << COLOR_NORMAL << endl;
             return;
         }
     }
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** Supported Commands - map.
  **/
 void doMapWindow(string windowString) {
-    Window window = getWindowMatchName(windowString);
+    Window window = getWindowWithBestName(windowString);
     if (!window) {
-        cout << "\033[33;1m\ndox11cmd: Cannot find a Window "
-            "by that name.\033[0m" << endl;
+        cout << COLOR_RED << "\ndox11cmd: Cannot find a Window "
+            "by that name." << COLOR_NORMAL << endl;
         return;
     }
 
     if(!XMapWindow(mDisplay, window)) {
-        fprintf(stdout, "dox11cmd: Error encountered trying to "
-            "map the Window ?? FATAL.\n");
+        cout << COLOR_RED << "dox11cmd: Error "
+            "trying to map the Window." << COLOR_NORMAL << endl;
         return;
     }
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** Supported Commands unmap.
  **/
 void doUnmapWindow(string windowString) {
-    Window window = getWindowMatchName(windowString);
+    Window window = getWindowWithBestName(windowString);
     if (!window) {
-        cout << "\033[33;1m\ndox11cmd: Cannot find a Window "
-            "by that name.\033[0m" << endl;
+        cout << COLOR_RED << "\ndox11cmd: Cannot find a Window "
+            "by that name." << COLOR_NORMAL << endl;
         return;
     }
 
     if(!XUnmapWindow(mDisplay, window)) {
-        fprintf(stdout, "dox11cmd: Error encountered trying to "
-            "unmap the Window ?? FATAL.\n");
+        cout << COLOR_RED << "dox11cmd: Error trying to "
+            "unmap the Window ?? FATAL." << COLOR_NORMAL << endl;
         return;
     }
 }
 
-/** *********************************************************************
- ** Helper to search for Window Id whose name matches the users request.
+/** ********************************************************
+ ** Helper to search for Window Id whose name matches.
  **/
-Window getWindowMatchName(string name) {
-    Window result = getWindowNameMatchExact(name);
+Window getWindowWithBestName(string name) {
+    Window result = getWindowWithExactName(name);
     if (result) {
         return result;
     }
 
-    return getWindowNameMatchPartial(name);
+    return getWindowWithPartialName(name);
 }
 
-/** *********************************************************************
- ** Helper to search for Window Id whose name matches the users request.
+/** ********************************************************
+ ** Helper to search for Window Id whose name matches.
  **/
-Window getWindowNameMatchExact(string name) {
+Window getWindowWithExactName(string name) {
     Window* stackedWins;
     int numberOfStackedWins = getX11StackedWindowsList(&stackedWins);
 
@@ -328,10 +367,10 @@ Window getWindowNameMatchExact(string name) {
     return None;
 }
 
-/** *********************************************************************
- ** Helper to search for Window Id whose name matches the users request.
+/** ********************************************************
+ ** Helper to search for Window Id whose name matches.
  **/
-Window getWindowNameMatchPartial(string name) {
+Window getWindowWithPartialName(string name) {
     Window* stackedWins;
     int numberOfStackedWins = getX11StackedWindowsList(&stackedWins);
 
@@ -355,7 +394,7 @@ Window getWindowNameMatchPartial(string name) {
     return None;
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** Helper method gets the X11 stacked windows list.
  **/
 unsigned long
@@ -364,7 +403,7 @@ getX11StackedWindowsList(Window** windows) {
         "_NET_CLIENT_LIST_STACKING", False), windows);
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** Helper method gets a requested root window property.
  **/
 unsigned long
@@ -386,7 +425,7 @@ getRootWindowProperty(Atom property, Window** windows) {
     return len;
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** This method determines if a window is visible on a workspace.
  **/
 long int getWindowWorkspace(Window window) {
@@ -399,7 +438,8 @@ long int getWindowWorkspace(Window window) {
 
     XGetWindowProperty(mDisplay, window,
         XInternAtom(mDisplay, "_NET_WM_DESKTOP", False), 0, 1, False,
-        AnyPropertyType, &type, &format, &nitems, &unusedBytes, &properties);
+        AnyPropertyType, &type, &format, &nitems,
+        &unusedBytes, &properties);
 
     if (type != XA_CARDINAL) {
         if (properties) {
@@ -408,8 +448,8 @@ long int getWindowWorkspace(Window window) {
         properties = NULL;
         XGetWindowProperty(mDisplay, window,
             XInternAtom(mDisplay, "_WIN_WORKSPACE", False), 0, 1,
-            False, AnyPropertyType, &type, &format, &nitems, &unusedBytes,
-            &properties);
+            False, AnyPropertyType, &type, &format, &nitems,
+            &unusedBytes, &properties);
     }
 
     if (properties) {
@@ -422,7 +462,7 @@ long int getWindowWorkspace(Window window) {
     return result;
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** This method determines if a window state is sticky.
  **/
 Bool isWindow_Sticky(long workSpace, WinInfo* winInfoItem) {
@@ -467,7 +507,7 @@ Bool isWindow_Sticky(long workSpace, WinInfo* winInfoItem) {
     return result;
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** This method checks for a _NET_WM_WINDOW_TYPE of
  ** _NET_WM_WINDOW_TYPE_DOCK.
  **/
@@ -508,7 +548,7 @@ Bool isWindow_Dock(WinInfo* winInfoItem) {
     return result;
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** This method determines if a window state is hidden.
  **/
 Bool isWindow_Hidden(Window window, int windowMapState) {
@@ -529,7 +569,7 @@ Bool isWindow_Hidden(Window window, int windowMapState) {
     return false;
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** This method checks for window _NET_SHOWING_DESKTOP property.
  **/
 Bool isDesktop_Visible() {
@@ -558,8 +598,8 @@ Bool isDesktop_Visible() {
     return result;
 }
 
-/** *********************************************************************
- ** This method checks "_NET_WM_STATE" for window HIDDEN attribute.
+/** ********************************************************
+ ** This method checks "_NET_WM_STATE" for window HIDDEN.
  **/
 Bool isNetWM_Hidden(Window window) {
     Bool result = false;
@@ -599,7 +639,7 @@ Bool isNetWM_Hidden(Window window) {
     return result;
 }
 
-/** *********************************************************************
+/** ********************************************************
  ** This method checks "WM_STATE" for window HIDDEN attribute.
  **/
 Bool isWM_Hidden(Window window) {
@@ -626,4 +666,15 @@ Bool isWM_Hidden(Window window) {
     }
 
     return result;
+}
+
+/** ********************************************************
+ ** This method traps and handles X11 errors.
+ **/
+int handleX11ErrorEvent(Display* dpy, XErrorEvent* err) {
+
+    cout << COLOR_RED << "dox11cmd: handleX11ErrorEvent() "
+        "Error encountered." << COLOR_NORMAL << endl;
+
+    return 0;
 }

@@ -2,16 +2,29 @@
 # *****************************************************
 # Variables to control Compile / Link.
 
+LIBX11DEV = /usr/include/X11/Xlib.h
 
 # ****************************************************
 # Compile any single FOO.cpp file and link it as FOO.
 all:
+	@if [ ! -f $(LIBX11DEV) ]; then \
+		echo "Error! The libx11-dev package is not installed,"; \
+		echo "   but is required to compile."; \
+		echo ""; \
+		echo "Try 'sudo apt install libx11-dev'"; \
+		echo "   then re-run this make."; \
+		echo ""; \
+		exit 1; \
+	fi
+
 	@echo
 	@echo "Build starts ..."
 	@echo
 
 	g++ -Wall -ansi -g -m64 -std=c++11 -c dox11cmd.cpp
-	g++ dox11cmd.o -m64 -L/usr/lib/x86_64-linux-gnu -lX11 -lxcb -lX11-xcb -o dox11cmd
+	g++ dox11cmd.o \
+		-m64 -L/usr/lib/x86_64-linux-gnu -lX11 \
+		-lxcb -o dox11cmd
 
 	@echo
 	@echo "Build Done !"
