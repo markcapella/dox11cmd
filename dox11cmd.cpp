@@ -77,7 +77,7 @@ int handleX11ErrorEvent(Display*, XErrorEvent*);
 #define COLOR_BLUE "\033[1;34m"
 #define COLOR_NORMAL "\033[0m"
 
-#define MAX_CHARS_FOR_TITLE_DISPLAY 35
+#define MAX_CHARS_FOR_TITLE_DISPLAY 40
 
 // Pattern for string switch-statement.
 vector<string> mCmdListStrings {
@@ -194,58 +194,75 @@ void doListStackedWindowNames() {
         getX11StackedWindowsList(&stackedWins);
 
     for (int i = numberOfStackedWins - 1; i >= 0; i--) {
+        // Get window attributes.
         XWindowAttributes windowAttributes;
         XGetWindowAttributes(mDisplay, stackedWins[i],
             &windowAttributes);
 
-        int xRelative;
-        int yRelative;
+        // Get window coordinates.
+        int xCoord;
+        int yCoord;
         Window child_return;
         XTranslateCoordinates(mDisplay, stackedWins[i],
-            DefaultRootWindow(mDisplay), 0, 0, &xRelative,
-            &yRelative, &child_return);
+            DefaultRootWindow(mDisplay), 0, 0, &xCoord,
+            &yCoord, &child_return);
 
+        // Get window title.
         XTextProperty titleBarName;
         XGetWMName(mDisplay, stackedWins[i], &titleBarName);
-        string formattedTitle((char*) titleBarName.value,
-            MAX_CHARS_FOR_TITLE_DISPLAY);
+
+        // Create a formatted title (name) c-string with a hard length,
+        // replacing unprintables with SPACE, padding right with SPACE,
+        // and preserving null terminator.
+        const char* inP = (char*) titleBarName.value;
+        const int inL = strlen(inP);
+
+        char outputTitle[MAX_CHARS_FOR_TITLE_DISPLAY + 1];
+        int outP = 0;
+
+        for (; outP < inL && outP < MAX_CHARS_FOR_TITLE_DISPLAY; outP++) {
+            outputTitle[outP] = isprint(*(inP + outP)) ?
+                *(inP + outP) : ' ';
+        }
+        for (; outP < MAX_CHARS_FOR_TITLE_DISPLAY; outP++) {
+            outputTitle[outP] = ' ';
+        }
+        outputTitle[outP] = '\0';
+
+        XFree(titleBarName.value);
 
         // Create a WinInfo struct.
         WinInfo* winInfoItem = (WinInfo*)
             malloc(sizeof(WinInfo));
 
         winInfoItem->id = stackedWins[i];
-
         winInfoItem->ws = getWindowWorkspace(stackedWins[i]);
 
         winInfoItem->sticky = isWindow_Sticky(winInfoItem->ws,
             winInfoItem);
-
         winInfoItem->dock = isWindow_Dock(winInfoItem);
-
         winInfoItem->hidden = isWindow_Hidden(stackedWins[i],
             windowAttributes.map_state);
 
-        winInfoItem->x = windowAttributes.x;
-        winInfoItem->y = windowAttributes.y;
+        winInfoItem->w  = windowAttributes.width;
+        winInfoItem->h  = windowAttributes.height;
 
-        winInfoItem->xa = xRelative - winInfoItem->x;
-        winInfoItem->ya = yRelative - winInfoItem->y;
+        winInfoItem->x  = windowAttributes.x;
+        winInfoItem->y  = windowAttributes.y;
 
-        winInfoItem->w = windowAttributes.width;
-        winInfoItem->h = windowAttributes.height;
+        winInfoItem->xa = xCoord - winInfoItem->x;
+        winInfoItem->ya = yCoord - winInfoItem->y;
 
-        fprintf(stdout, "[0x%08lx]  %-40s  %2li  "
+        // Log a WinInfo struct.
+        fprintf(stdout, "[0x%08lx]  %s  %2li  "
             " %5d , %-5d %5d x %-5d  %s%s%s\n",
-            winInfoItem->id, formattedTitle.c_str(),
+            winInfoItem->id, outputTitle,
             winInfoItem->ws,
             winInfoItem->xa, winInfoItem->ya,
             winInfoItem->w, winInfoItem->h,
             winInfoItem->dock ? "dock " : "",
             winInfoItem->sticky ? "sticky " : "",
             winInfoItem->hidden ? "hidden" : "");
-
-        XFree(titleBarName.value);
     }
 }
 
