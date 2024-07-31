@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
@@ -21,13 +22,13 @@ using namespace std;
 /** ********************************************************
  ** Wininfo object.
  **/
-typedef struct _WinInfo {
+typedef struct {
         Window id;         // id.
         long ws;           // workspace.
 
-        Bool sticky;       // visible on all workspaces?
-        Bool dock;         // is a "dock" (panel)?
-        Bool hidden;       // is hidden / iconized?
+        bool sticky;       // visible on all workspaces?
+        bool dock;         // is a "dock" (panel)?
+        bool hidden;       // is hidden / iconized?
 
         int x, y;          // x,y coordinates.
         int xa, ya;        // x,y coordinates absolute.
@@ -55,13 +56,13 @@ unsigned long getX11StackedWindowsList(Window**);
 unsigned long getRootWindowProperty(Atom, Window**);
 long int getWindowWorkspace(Window window);
 
-Bool isWindow_Sticky(long workSpace, WinInfo*);
-Bool isWindow_Dock(WinInfo*);
-Bool isWindow_Hidden(Window window, int windowMapState);
+bool isWindow_Sticky(long workSpace, WinInfo*);
+bool isWindow_Dock(WinInfo*);
+bool isWindow_Hidden(Window window, int windowMapState);
 
-Bool isDesktop_Visible();
-Bool isNetWM_Hidden(Window window);
-Bool isWM_Hidden(Window window);
+bool isDesktop_Visible();
+bool isNetWM_Hidden(Window window);
+bool isWM_Hidden(Window window);
 
 int handleX11ErrorEvent(Display*, XErrorEvent*);
 
@@ -77,8 +78,6 @@ int handleX11ErrorEvent(Display*, XErrorEvent*);
 #define COLOR_BLUE "\033[1;34m"
 #define COLOR_NORMAL "\033[0m"
 
-#define MAX_CHARS_FOR_TITLE_DISPLAY 40
-
 // Pattern for string switch-statement.
 vector<string> mCmdListStrings {
     "list", "raise", "lower", "map", "unmap"};
@@ -90,6 +89,11 @@ string mWindow = "";
 string mAltWindow = "";
 
 Display* mDisplay;
+
+#define MAX_TITLE_STRING_LENGTH 40
+#define MAX_ERROR_MESSAGE_LENGTH 60
+
+int mX11LastErrorCode = 0;
 
 
 /** ********************************************************
@@ -107,12 +111,19 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Check for Wayland as error.
+    const bool isWaylandPresent = getenv("WAYLAND_DISPLAY") &&
+        getenv("WAYLAND_DISPLAY") [0];
+    if (isWaylandPresent) {
+        cout << COLOR_YELLOW << "\ndox11cmd: Wayland desktop is detected."
+            << COLOR_NORMAL << endl;
+    }
+
     // X11 Initialization.
     mDisplay = XOpenDisplay(NULL);
     if (!mDisplay) {
-        cout << COLOR_RED <<
-            "\ndox11cmd: X11 Does not seem to be available." <<
-            COLOR_NORMAL << endl;
+        cout << COLOR_RED << "\ndox11cmd: X11 Does not seem to be "
+            "available." << COLOR_NORMAL << endl;
         exit(1);
     }
 
@@ -181,7 +192,7 @@ void doDisplayUseage() {
  ** Supported Commands - list.
  **/
 void doListStackedWindowNames() {
-    cout << endl << COLOR_BLUE << "\nWindows in Stacked Order "
+    cout << COLOR_BLUE << "\nWindows in Stacked Order "
         "above Desktop:" << COLOR_NORMAL << endl;
 
     cout << COLOR_GREEN << "\n---window---  Titlebar Name"
@@ -196,40 +207,47 @@ void doListStackedWindowNames() {
     for (int i = numberOfStackedWins - 1; i >= 0; i--) {
         // Get window attributes.
         XWindowAttributes windowAttributes;
+        windowAttributes.map_state = -1;
+        windowAttributes.width = -1;
+        windowAttributes.height = -1;
+        windowAttributes.x = -1;
+        windowAttributes.y = -1;
+
         XGetWindowAttributes(mDisplay, stackedWins[i],
             &windowAttributes);
 
         // Get window coordinates.
-        int xCoord;
-        int yCoord;
-        Window child_return;
+        int xCoord = -1;
+        int yCoord = -1;
+        Window child_return = None;
+
         XTranslateCoordinates(mDisplay, stackedWins[i],
             DefaultRootWindow(mDisplay), 0, 0, &xCoord,
             &yCoord, &child_return);
 
         // Get window title.
-        XTextProperty titleBarName;
-        XGetWMName(mDisplay, stackedWins[i], &titleBarName);
-
         // Create a formatted title (name) c-string with a hard length,
         // replacing unprintables with SPACE, padding right with SPACE,
         // and preserving null terminator.
-        const char* inP = (char*) titleBarName.value;
-        const int inL = strlen(inP);
-
-        char outputTitle[MAX_CHARS_FOR_TITLE_DISPLAY + 1];
+        char outputTitle[MAX_TITLE_STRING_LENGTH + 1];
         int outP = 0;
 
-        for (; outP < inL && outP < MAX_CHARS_FOR_TITLE_DISPLAY; outP++) {
-            outputTitle[outP] = isprint(*(inP + outP)) ?
-                *(inP + outP) : ' ';
+        XTextProperty titleBarName;
+        if (XGetWMName(mDisplay, stackedWins[i], &titleBarName) != 0) {
+            const char* nameP = (char*) titleBarName.value;
+            const int nameL = strlen(nameP);
+            for (; outP < nameL && outP < MAX_TITLE_STRING_LENGTH; outP++) {
+                outputTitle[outP] = isprint(*(nameP + outP)) ?
+                    *(nameP + outP) : ' ';
+            }
+            XFree(titleBarName.value);
         }
-        for (; outP < MAX_CHARS_FOR_TITLE_DISPLAY; outP++) {
+
+        for (; outP < MAX_TITLE_STRING_LENGTH; outP++) {
             outputTitle[outP] = ' ';
         }
         outputTitle[outP] = '\0';
 
-        XFree(titleBarName.value);
 
         // Create a WinInfo struct.
         WinInfo* winInfoItem = (WinInfo*)
@@ -451,11 +469,11 @@ long int getWindowWorkspace(Window window) {
     Atom type;
     int format;
     unsigned long nitems, unusedBytes;
-    unsigned char *properties = NULL;
+    unsigned char* properties = NULL;
 
     XGetWindowProperty(mDisplay, window,
-        XInternAtom(mDisplay, "_NET_WM_DESKTOP", False), 0, 1, False,
-        AnyPropertyType, &type, &format, &nitems,
+        XInternAtom(mDisplay, "_NET_WM_DESKTOP", False),
+        0, 1, False, AnyPropertyType, &type, &format, &nitems,
         &unusedBytes, &properties);
 
     if (type != XA_CARDINAL) {
@@ -463,17 +481,16 @@ long int getWindowWorkspace(Window window) {
             XFree(properties);
         }
         properties = NULL;
+
         XGetWindowProperty(mDisplay, window,
-            XInternAtom(mDisplay, "_WIN_WORKSPACE", False), 0, 1,
-            False, AnyPropertyType, &type, &format, &nitems,
+            XInternAtom(mDisplay, "_WIN_WORKSPACE", False),
+            0, 1, False, AnyPropertyType, &type, &format, &nitems,
             &unusedBytes, &properties);
     }
 
     if (properties) {
-        result = *(long *) (void *) properties;
-        if (properties) {
-            XFree(properties);
-        }
+        result = *(long*) (void*) properties;
+        XFree(properties);
     }
 
     return result;
@@ -482,18 +499,18 @@ long int getWindowWorkspace(Window window) {
 /** ********************************************************
  ** This method determines if a window state is sticky.
  **/
-Bool isWindow_Sticky(long workSpace, WinInfo* winInfoItem) {
+bool isWindow_Sticky(long workSpace, WinInfo* winInfoItem) {
     // Needed in KDE and LXDE.
     if (workSpace == -1) {
         return true;
     }
 
-    Bool result = false;
+    bool result = false;
 
     Atom type;
     int format;
     unsigned long nitems, unusedBytes;
-    unsigned char *properties = NULL;
+    unsigned char* properties = NULL;
 
     XGetWindowProperty(mDisplay, winInfoItem->id,
         XInternAtom(mDisplay, "_NET_WM_STATE", False),
@@ -502,8 +519,8 @@ Bool isWindow_Sticky(long workSpace, WinInfo* winInfoItem) {
 
     if (type == XA_ATOM) {
         for (unsigned long int i = 0; i < nitems; i++) {
-            char *nameString = XGetAtomName(mDisplay,
-                ((Atom *) (void *) properties) [i]);
+            char* nameString = XGetAtomName(mDisplay,
+                ((Atom*) (void*) properties) [i]);
             if (strcmp(nameString, "_NET_WM_STATE_STICKY") == 0) {
                 result = true;
                 if (nameString) {
@@ -528,13 +545,13 @@ Bool isWindow_Sticky(long workSpace, WinInfo* winInfoItem) {
  ** This method checks for a _NET_WM_WINDOW_TYPE of
  ** _NET_WM_WINDOW_TYPE_DOCK.
  **/
-Bool isWindow_Dock(WinInfo* winInfoItem) {
-    Bool result = false;
+bool isWindow_Dock(WinInfo* winInfoItem) {
+    bool result = false;
 
     Atom type;
     int format;
     unsigned long nitems, unusedBytes;
-    unsigned char *properties = NULL;
+    unsigned char* properties = NULL;
 
     XGetWindowProperty(mDisplay, winInfoItem->id,
         XInternAtom(mDisplay, "_NET_WM_WINDOW_TYPE", False),
@@ -543,8 +560,8 @@ Bool isWindow_Dock(WinInfo* winInfoItem) {
 
     if (format == 32) {
         for (int i = 0; (unsigned long)i < nitems; i++) {
-            char *nameString = XGetAtomName(mDisplay,
-                ((Atom *) (void *) properties) [i]);
+            char* nameString = XGetAtomName(mDisplay,
+                ((Atom*) (void*) properties) [i]);
             if (strcmp(nameString, "_NET_WM_WINDOW_TYPE_DOCK") == 0) {
                 result = true;
                 if (nameString) {
@@ -568,7 +585,7 @@ Bool isWindow_Dock(WinInfo* winInfoItem) {
 /** ********************************************************
  ** This method determines if a window state is hidden.
  **/
-Bool isWindow_Hidden(Window window, int windowMapState) {
+bool isWindow_Hidden(Window window, int windowMapState) {
     if (!isDesktop_Visible()) {
         return true;
     }
@@ -589,13 +606,13 @@ Bool isWindow_Hidden(Window window, int windowMapState) {
 /** ********************************************************
  ** This method checks for window _NET_SHOWING_DESKTOP property.
  **/
-Bool isDesktop_Visible() {
-    Bool result = true;
+bool isDesktop_Visible() {
+    bool result = true;
 
     Atom type;
     int format;
     unsigned long nitems, unusedBytes;
-    unsigned char *properties = NULL;
+    unsigned char* properties = NULL;
 
     XGetWindowProperty(mDisplay, DefaultRootWindow(mDisplay),
         XInternAtom(mDisplay, "_NET_SHOWING_DESKTOP", False),
@@ -603,7 +620,7 @@ Bool isDesktop_Visible() {
         &nitems, &unusedBytes, &properties);
 
     if (format == 32 && nitems >= 1) {
-        if (*(long *) (void *) properties == 1) {
+        if (*(long*) (void*) properties == 1) {
             result = false;
         }
     }
@@ -618,13 +635,13 @@ Bool isDesktop_Visible() {
 /** ********************************************************
  ** This method checks "_NET_WM_STATE" for window HIDDEN.
  **/
-Bool isNetWM_Hidden(Window window) {
-    Bool result = false;
+bool isNetWM_Hidden(Window window) {
+    bool result = false;
 
     Atom type;
     int format;
     unsigned long nitems, unusedBytes;
-    unsigned char *properties = NULL;
+    unsigned char* properties = NULL;
 
     XGetWindowProperty(mDisplay, window,
         XInternAtom(mDisplay, "_NET_WM_STATE", False),
@@ -633,8 +650,8 @@ Bool isNetWM_Hidden(Window window) {
 
     if (format == 32) {
         for (unsigned long i = 0; i < nitems; i++) {
-            char *nameString = XGetAtomName(mDisplay,
-                ((Atom *) (void *) properties) [i]);
+            char* nameString = XGetAtomName(mDisplay,
+                ((Atom*) (void*) properties) [i]);
             if (strcmp(nameString, "_NET_WM_STATE_HIDDEN") == 0) {
                 result = true;
                 if (nameString) {
@@ -659,13 +676,13 @@ Bool isNetWM_Hidden(Window window) {
 /** ********************************************************
  ** This method checks "WM_STATE" for window HIDDEN attribute.
  **/
-Bool isWM_Hidden(Window window) {
-    Bool result = false;
+bool isWM_Hidden(Window window) {
+    bool result = false;
 
     Atom type;
     int format;
     unsigned long nitems, unusedBytes;
-    unsigned char *properties = NULL;
+    unsigned char* properties = NULL;
 
     XGetWindowProperty(mDisplay, window,
         XInternAtom(mDisplay, "WM_STATE", False),
@@ -673,7 +690,7 @@ Bool isWM_Hidden(Window window) {
         &nitems, &unusedBytes, &properties);
 
     if (format == 32 && nitems >= 1) {
-        if (* (long*) (void*) properties != NormalState) {
+        if (*(long*) (void*) properties != NormalState) {
             result = true;
         }
     }
@@ -688,10 +705,20 @@ Bool isWM_Hidden(Window window) {
 /** ********************************************************
  ** This method traps and handles X11 errors.
  **/
-int handleX11ErrorEvent(Display* dpy, XErrorEvent* err) {
+int handleX11ErrorEvent(Display* dpy, XErrorEvent* event) {
 
-    cout << COLOR_RED << "dox11cmd: handleX11ErrorEvent() "
-        "Error encountered." << COLOR_NORMAL << endl;
+    // Save error & quit early if simply BadWindow.
+    mX11LastErrorCode = event->error_code;
+    if (mX11LastErrorCode == BadWindow) {
+        return 0;
+    }
+
+    // Print the error message of the event.
+    char msg[MAX_ERROR_MESSAGE_LENGTH];
+    XGetErrorText(dpy, event->error_code, msg, sizeof(msg));
+
+    printf("dox11cmd: Error is %s%s%s.\n",
+        COLOR_RED, msg, COLOR_NORMAL);
 
     return 0;
 }
