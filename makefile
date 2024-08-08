@@ -62,17 +62,6 @@ all:
 # sudo make install
 #
 install:
-	@if ! [ "$(shell id -u)" = 0 ]; then \
-		echo; \
-		echo "$(COLOR_RED)Error!$(COLOR_NORMAL) You must"\
-			"be root to perform this action."; \
-		echo; \
-		echo  "Please re-run with:"; \
-		echo "   $(COLOR_GREEN)sudo make install$(COLOR_NORMAL)"; \
-		echo; \
-		exit 1; \
-	fi
-
 	@if [ ! -f BUILD_COMPLETE ]; then \
 		echo; \
 		echo "$(COLOR_RED)Error!$(COLOR_NORMAL) Nothing"\
@@ -80,6 +69,17 @@ install:
 		echo; \
 		echo "Please make this project first, with:"; \
 		echo "   $(COLOR_GREEN)make$(COLOR_NORMAL)"; \
+		echo; \
+		exit 1; \
+	fi
+
+	@if ! [ "$(shell id -u)" = 0 ]; then \
+		echo; \
+		echo "$(COLOR_RED)Error!$(COLOR_NORMAL) You must"\
+			"be root to perform this action."; \
+		echo; \
+		echo  "Please re-run with:"; \
+		echo "   $(COLOR_GREEN)sudo make install$(COLOR_NORMAL)"; \
 		echo; \
 		exit 1; \
 	fi
