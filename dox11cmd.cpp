@@ -399,6 +399,7 @@ Window getWindowWithExactName(string name) {
 
         XFree(titleBarName.value);
     }
+
     return None;
 }
 
@@ -477,9 +478,7 @@ long int getWindowWorkspace(Window window) {
         &unusedBytes, &properties);
 
     if (type != XA_CARDINAL) {
-        if (properties) {
-            XFree(properties);
-        }
+        XFree(properties);
         properties = NULL;
 
         XGetWindowProperty(mDisplay, window,
@@ -523,21 +522,14 @@ bool isWindow_Sticky(long workSpace, WinInfo* winInfoItem) {
                 ((Atom*) (void*) properties) [i]);
             if (strcmp(nameString, "_NET_WM_STATE_STICKY") == 0) {
                 result = true;
-                if (nameString) {
-                    XFree(nameString);
-                }
+                XFree(nameString);
                 break;
             }
-            if (nameString) {
-                XFree(nameString);
-            }
+            XFree(nameString);
         }
     }
 
-    if (properties) {
-        XFree(properties);
-    }
-
+    XFree(properties);
     return result;
 }
 
@@ -564,21 +556,14 @@ bool isWindow_Dock(WinInfo* winInfoItem) {
                 ((Atom*) (void*) properties) [i]);
             if (strcmp(nameString, "_NET_WM_WINDOW_TYPE_DOCK") == 0) {
                 result = true;
-                if (nameString) {
-                    XFree(nameString);
-                }
+                XFree(nameString);
                 break;
             }
-            if (nameString) {
-                XFree(nameString);
-            }
+            XFree(nameString);
         }
     }
 
-    if (properties) {
-        XFree(properties);
-    }
-
+    XFree(properties);
     return result;
 }
 
@@ -625,10 +610,7 @@ bool isDesktop_Visible() {
         }
     }
 
-    if (properties) {
-        XFree(properties);
-    }
-
+    XFree(properties);
     return result;
 }
 
@@ -654,22 +636,14 @@ bool isNetWM_Hidden(Window window) {
                 ((Atom*) (void*) properties) [i]);
             if (strcmp(nameString, "_NET_WM_STATE_HIDDEN") == 0) {
                 result = true;
-                if (nameString) {
-                    XFree(nameString);
-                }
+                XFree(nameString);
                 break;
             }
-
-            if (nameString) {
-                XFree(nameString);
-            }
+            XFree(nameString);
         }
     }
 
-    if (properties) {
-        XFree(properties);
-    }
-
+    XFree(properties);
     return result;
 }
 
@@ -695,10 +669,7 @@ bool isWM_Hidden(Window window) {
         }
     }
 
-    if (properties) {
-        XFree(properties);
-    }
-
+    XFree(properties);
     return result;
 }
 
