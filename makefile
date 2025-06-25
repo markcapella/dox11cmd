@@ -3,7 +3,7 @@
 # Variables to control Compile / Link.
 
 APP_NAME="dox11cmd"
-APP_VERSION="2024-08-08"
+APP_VERSION="2025-06-25"
 APP_AUTHOR="Mark James Capella"
 
 # Color styling.
@@ -37,10 +37,13 @@ all:
 	fi
 
 	@if [ ! -f $(LIBX11DEV) ]; then \
-		echo "Error! The libx11-dev package is not installed,"; \
+		echo "$(COLOR_RED)Error!$(COLOR_NORMAL) The"\
+			"libx11-dev package is not installed,"; \
 		echo "   but is required to compile."; \
 		echo ""; \
-		echo "Try 'sudo apt install libx11-dev'"; \
+		echo  "Try:"; \
+		echo "   $(COLOR_GREEN)sudo apt install"\
+			"libx11-dev$(COLOR_NORMAL)"; \
 		echo "   then re-run this make."; \
 		echo ""; \
 		exit 1; \
