@@ -3,7 +3,7 @@
 # Variables to control Compile / Link.
 
 APP_NAME="dox11cmd"
-APP_VERSION="2025-06-25"
+APP_VERSION="2025-09-26"
 APP_AUTHOR="Mark James Capella"
 
 # Color styling.
