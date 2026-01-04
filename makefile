@@ -3,15 +3,20 @@
 # Variables to control Compile / Link.
 
 APP_NAME="dox11cmd"
-APP_VERSION="2025-09-26"
+APP_VERSION="2026-01-04"
 APP_AUTHOR="Mark James Capella"
 
 # Color styling.
-COLOR_RED = \033[0;31m
-COLOR_GREEN = \033[1;32m
-COLOR_YELLOW = \033[1;33m
-COLOR_BLUE = \033[1;34m
-COLOR_NORMAL = \033[0m
+COLOR_NORMAL := $(shell tput sgr0)
+
+COLOR_BLACK := $(shell tput setaf 0)
+COLOR_RED := $(shell tput setaf 1)
+COLOR_GREEN := $(shell tput setaf 2)
+COLOR_YELLOW := $(shell tput setaf 3)
+COLOR_BLUE := $(shell tput setaf 4)
+COLOR_MAGENTA := $(shell tput setaf 5)
+COLOR_CYAN := $(shell tput setaf 6)
+COLOR_WHITE := $(shell tput setaf 7)
 
 CC = g++
 
