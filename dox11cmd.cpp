@@ -1,7 +1,9 @@
-/** ********************************************************
- ** Main dox11cmd.
- **/
 
+/**
+ * Small cmdline tool to examine and handle x11 Windows.
+ */
+
+// Std C and c++.
 #include <algorithm>
 #include <iostream>
 #include <stdbool.h>
@@ -11,94 +13,43 @@
 #include <unistd.h>
 #include <vector>
 
+using namespace std;
+
+// X11.
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <X11/Xos.h>
 #include <X11/Xutil.h>
 
-using namespace std;
+// Application.
+#include "dox11cmd.h"
+#include "xDisplayHelper.h"
 
 
-/** ********************************************************
- ** Wininfo object.
- **/
-typedef struct {
-        Window id;         // id.
-        long ws;           // workspace.
-
-        bool sticky;       // visible on all workspaces?
-        bool dock;         // is a "dock" (panel)?
-        bool hidden;       // is hidden / iconized?
-
-        int x, y;          // x,y coordinates.
-        int xa, ya;        // x,y coordinates absolute.
-        unsigned int w, h; // width, height.
-} WinInfo;
-
-/** ********************************************************
- * Module Method stubs.
+/**
+ * Module globals.
  */
-// Forward declare helpers.
-void doDisplayUseage();
-
-// Forward declare supported commands.
-void doListStackedWindowNames();
-void doRaiseWindow(string);
-void doLowerWindow(string);
-void doMapWindow(string);
-void doUnmapWindow(string);
-
-Window getWindowWithBestName(string);
-Window getWindowWithExactName(string name);
-Window getWindowWithPartialName(string name);
-
-unsigned long getX11StackedWindowsList(Window**);
-unsigned long getRootWindowProperty(Atom, Window**);
-long int getWindowWorkspace(Window window);
-
-bool isWindow_Sticky(long workSpace, WinInfo*);
-bool isWindow_Dock(WinInfo*);
-bool isWindow_Hidden(Window window, int windowMapState);
-
-bool isDesktop_Visible();
-bool isNetWM_Hidden(Window window);
-bool isWM_Hidden(Window window);
-
-int handleX11ErrorEvent(Display*, XErrorEvent*);
-
-
-/** ********************************************************
- ** Module globals and consts.
- **/
-
-// Minor styling.
-#define COLOR_RED "\033[0;31m"
-#define COLOR_GREEN "\033[1;32m"
-#define COLOR_YELLOW "\033[1;33m"
-#define COLOR_BLUE "\033[1;34m"
-#define COLOR_NORMAL "\033[0m"
 
 // Pattern for string switch-statement.
 vector<string> mCmdListStrings {
-    "list", "raise", "lower", "map", "unmap"};
+    "list", "raise", "lower", "map", "unmap"
+};
 enum M_COMMAND_STRING {
-    LIST, RAISE, LOWER, MAP, UNMAP};
+    LIST, RAISE, LOWER, MAP, UNMAP
+};
 
 string mCmdString = "";
 string mWindow = "";
 string mAltWindow = "";
 
+xDisplayHelper* mDisplayHelper;
 Display* mDisplay;
-
-#define MAX_TITLE_STRING_LENGTH 40
-#define MAX_ERROR_MESSAGE_LENGTH 60
-
 int mX11LastErrorCode = 0;
 
 
-/** ********************************************************
- ** Module Entry.
- **/
+/**
+ * Module Entry.
+ */
 int main(int argc, char **argv) {
     // String, and guard the inputs.
     if (argc > 1) {
@@ -120,7 +71,8 @@ int main(int argc, char **argv) {
     }
 
     // X11 Initialization.
-    mDisplay = XOpenDisplay(NULL);
+    mDisplayHelper = new xDisplayHelper();
+    mDisplay = mDisplayHelper->getDisplay();
     if (!mDisplay) {
         cout << COLOR_RED << "\ndox11cmd: X11 Does not seem to be "
             "available." << COLOR_NORMAL << endl;
@@ -165,9 +117,9 @@ int main(int argc, char **argv) {
     XCloseDisplay(mDisplay);
 }
 
-/** ********************************************************
- ** Display useage (All Supported Commands).
- **/
+/**
+ * Display useage (All Supported Commands).
+ */
 void doDisplayUseage() {
     cout << COLOR_BLUE <<
         "\nUseage: dox11cmd VERB [WINDOW]" <<
@@ -188,9 +140,9 @@ void doDisplayUseage() {
         "TitleBar Name." << endl;
 }
 
-/** ********************************************************
- ** Supported Commands - list.
- **/
+/**
+ * Supported Commands - list.
+ */
 void doListStackedWindowNames() {
     cout << COLOR_BLUE << "\nWindows in Stacked Order "
         "above Desktop:" << COLOR_NORMAL << endl;
@@ -284,9 +236,9 @@ void doListStackedWindowNames() {
     }
 }
 
-/** ********************************************************
- ** Supported Commands - raise.
- **/
+/**
+ * Supported Commands - raise.
+ */
 void doRaiseWindow(string windowString) {
     Window window = getWindowWithBestName(windowString);
     if (!window) {
@@ -302,9 +254,9 @@ void doRaiseWindow(string windowString) {
     }
 }
 
-/** ********************************************************
- ** Supported Commands - lower.
- **/
+/**
+ * Supported Commands - lower.
+ */
 void doLowerWindow(string windowString) {
     Window window = getWindowWithBestName(windowString);
     if (!window) {
@@ -329,9 +281,9 @@ void doLowerWindow(string windowString) {
     }
 }
 
-/** ********************************************************
- ** Supported Commands - map.
- **/
+/**
+ * Supported Commands - map.
+ */
 void doMapWindow(string windowString) {
     Window window = getWindowWithBestName(windowString);
     if (!window) {
@@ -347,9 +299,9 @@ void doMapWindow(string windowString) {
     }
 }
 
-/** ********************************************************
- ** Supported Commands unmap.
- **/
+/**
+ * Supported Commands unmap.
+ */
 void doUnmapWindow(string windowString) {
     Window window = getWindowWithBestName(windowString);
     if (!window) {
@@ -365,9 +317,9 @@ void doUnmapWindow(string windowString) {
     }
 }
 
-/** ********************************************************
- ** Helper to search for Window Id whose name matches.
- **/
+/**
+ * Helper to search for Window Id whose name matches.
+ */
 Window getWindowWithBestName(string name) {
     Window result = getWindowWithExactName(name);
     if (result) {
@@ -377,9 +329,9 @@ Window getWindowWithBestName(string name) {
     return getWindowWithPartialName(name);
 }
 
-/** ********************************************************
- ** Helper to search for Window Id whose name matches.
- **/
+/**
+ * Helper to search for Window Id whose name matches.
+ */
 Window getWindowWithExactName(string name) {
     Window* stackedWins;
     int numberOfStackedWins = getX11StackedWindowsList(&stackedWins);
@@ -403,9 +355,9 @@ Window getWindowWithExactName(string name) {
     return None;
 }
 
-/** ********************************************************
- ** Helper to search for Window Id whose name matches.
- **/
+/**
+ * Helper to search for Window Id whose name matches.
+ */
 Window getWindowWithPartialName(string name) {
     Window* stackedWins;
     int numberOfStackedWins = getX11StackedWindowsList(&stackedWins);
@@ -430,18 +382,18 @@ Window getWindowWithPartialName(string name) {
     return None;
 }
 
-/** ********************************************************
- ** Helper method gets the X11 stacked windows list.
- **/
+/**
+ * Helper method gets the X11 stacked windows list.
+ */
 unsigned long
 getX11StackedWindowsList(Window** windows) {
     return getRootWindowProperty(XInternAtom(mDisplay,
         "_NET_CLIENT_LIST_STACKING", False), windows);
 }
 
-/** ********************************************************
- ** Helper method gets a requested root window property.
- **/
+/**
+ * Helper method gets a requested root window property.
+ */
 unsigned long
 getRootWindowProperty(Atom property, Window** windows) {
     Atom da;
@@ -461,9 +413,9 @@ getRootWindowProperty(Atom property, Window** windows) {
     return len;
 }
 
-/** ********************************************************
- ** This method determines if a window is visible on a workspace.
- **/
+/**
+ * This method determines if a window is visible on a workspace.
+ */
 long int getWindowWorkspace(Window window) {
     long int result = 0;
 
@@ -495,9 +447,9 @@ long int getWindowWorkspace(Window window) {
     return result;
 }
 
-/** ********************************************************
- ** This method determines if a window state is sticky.
- **/
+/**
+ * This method determines if a window state is sticky.
+ */
 bool isWindow_Sticky(long workSpace, WinInfo* winInfoItem) {
     // Needed in KDE and LXDE.
     if (workSpace == -1) {
@@ -533,10 +485,10 @@ bool isWindow_Sticky(long workSpace, WinInfo* winInfoItem) {
     return result;
 }
 
-/** ********************************************************
- ** This method checks for a _NET_WM_WINDOW_TYPE of
- ** _NET_WM_WINDOW_TYPE_DOCK.
- **/
+/**
+ * This method checks for a _NET_WM_WINDOW_TYPE of
+ * _NET_WM_WINDOW_TYPE_DOCK.
+ */
 bool isWindow_Dock(WinInfo* winInfoItem) {
     bool result = false;
 
@@ -567,9 +519,9 @@ bool isWindow_Dock(WinInfo* winInfoItem) {
     return result;
 }
 
-/** ********************************************************
- ** This method determines if a window state is hidden.
- **/
+/**
+ * This method determines if a window state is hidden.
+ */
 bool isWindow_Hidden(Window window, int windowMapState) {
     if (!isDesktop_Visible()) {
         return true;
@@ -588,9 +540,9 @@ bool isWindow_Hidden(Window window, int windowMapState) {
     return false;
 }
 
-/** ********************************************************
- ** This method checks for window _NET_SHOWING_DESKTOP property.
- **/
+/**
+ * This method checks for window _NET_SHOWING_DESKTOP property.
+ */
 bool isDesktop_Visible() {
     bool result = true;
 
@@ -614,9 +566,9 @@ bool isDesktop_Visible() {
     return result;
 }
 
-/** ********************************************************
- ** This method checks "_NET_WM_STATE" for window HIDDEN.
- **/
+/**
+ * This method checks "_NET_WM_STATE" for window HIDDEN.
+ */
 bool isNetWM_Hidden(Window window) {
     bool result = false;
 
@@ -647,9 +599,9 @@ bool isNetWM_Hidden(Window window) {
     return result;
 }
 
-/** ********************************************************
- ** This method checks "WM_STATE" for window HIDDEN attribute.
- **/
+/**
+ * This method checks "WM_STATE" for window HIDDEN attribute.
+ */
 bool isWM_Hidden(Window window) {
     bool result = false;
 
@@ -673,9 +625,9 @@ bool isWM_Hidden(Window window) {
     return result;
 }
 
-/** ********************************************************
- ** This method traps and handles X11 errors.
- **/
+/**
+ * This method traps and handles X11 errors.
+ */
 int handleX11ErrorEvent(Display* dpy, XErrorEvent* event) {
 
     // Save error & quit early if simply BadWindow.

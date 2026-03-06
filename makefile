@@ -3,7 +3,7 @@
 # Variables to control Compile / Link.
 
 APP_NAME="dox11cmd"
-APP_VERSION="2026-01-04"
+APP_VERSION="2026-03-06"
 APP_AUTHOR="Mark James Capella"
 
 # Color styling.
@@ -18,10 +18,11 @@ COLOR_MAGENTA := $(shell tput setaf 5)
 COLOR_CYAN := $(shell tput setaf 6)
 COLOR_WHITE := $(shell tput setaf 7)
 
-CC = g++
+CPP = g++
 
-APP_CFLAGS=-Wall -ansi -g -m64 -std=c++11
-APP_LFLAGS=-m64 -L/usr/lib/x86_64-linux-gnu -lX11 -lxcb
+APP_CFLAGS=-Wall -ansi -g -m64 -std=c++17
+APP_LFLAGS=-m64 -L/usr/lib/x86_64-linux-gnu \
+	-lX11 -lxcb
 
 LIBX11DEV = /usr/include/X11/Xlib.h
 
@@ -58,13 +59,49 @@ all:
 	@echo "$(COLOR_BLUE)Build Starts.$(COLOR_NORMAL)"
 	@echo
 
-	$(CC) $(APP_CFLAGS) -c dox11cmd.cpp
-	$(CC) dox11cmd.o $(APP_LFLAGS) -o dox11cmd
+	$(CPP) $(APP_CFLAGS) -c xDisplayHelper.cpp
+	$(CPP) $(APP_CFLAGS) -c dox11cmd.cpp
+
+	$(CPP) dox11cmd.o xDisplayHelper.o \
+		$(APP_LFLAGS) -o dox11cmd
 
 	@echo "true" > "BUILD_COMPLETE"
 
 	@echo
 	@echo "$(COLOR_BLUE)Build Done.$(COLOR_NORMAL)"
+
+# ****************************************************
+# make run
+#
+run:
+	@if [ ! -f BUILD_COMPLETE ]; then \
+		echo; \
+		echo "$(COLOR_RED)Error!$(COLOR_NORMAL) Nothing"\
+			"currently built to run."; \
+		echo; \
+		echo "Please make this project first, with:"; \
+		echo "   $(COLOR_GREEN)make$(COLOR_NORMAL)"; \
+		echo; \
+		exit 1; \
+	fi
+
+	@if [ "$(shell id -u)" = 0 ]; then \
+		echo; \
+		echo "$(COLOR_RED)Error!$(COLOR_NORMAL) You must not"\
+			"be root to perform this action."; \
+		echo; \
+		echo  "Please re-run with:"; \
+		echo "   $(COLOR_GREEN)make run$(COLOR_NORMAL)"; \
+		echo; \
+		exit 1; \
+	fi
+
+	@echo
+	@echo "$(COLOR_BLUE)Run Starts.$(COLOR_NORMAL)"
+
+	./dox11cmd list
+
+	@echo "$(COLOR_BLUE)Run Done.$(COLOR_NORMAL)"
 
 # ****************************************************
 # sudo make install
@@ -145,6 +182,7 @@ clean:
 	@echo "$(COLOR_BLUE)Clean Starts.$(COLOR_NORMAL)"
 	@echo
 
+	rm -f xDisplayHelper.o
 	rm -f dox11cmd.o
 	rm -f dox11cmd
 
