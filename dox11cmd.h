@@ -14,15 +14,18 @@ using namespace std;
  */
 typedef struct {
         Window id;         // id.
-        long ws;           // workspace.
+
+        int ws;           // workspace.
+        int mapState = -1; // Undef.
+
+        int xa, ya;        // x,y coordinates absolute.
+        unsigned int w, h; // width, height.
+        int x, y;          // x,y coordinates.
 
         bool sticky;       // visible on all workspaces?
         bool dock;         // is a "dock" (panel)?
         bool hidden;       // is hidden / iconized?
 
-        int x, y;          // x,y coordinates.
-        int xa, ya;        // x,y coordinates absolute.
-        unsigned int w, h; // width, height.
 } WinInfo;
 
 #define COLOR_RED "\033[0;31m"
@@ -54,7 +57,7 @@ Window getWindowWithPartialName(string name);
 
 unsigned long getX11StackedWindowsList(Window**);
 unsigned long getRootWindowProperty(Atom, Window**);
-long int getWindowWorkspace(Window window);
+long getWindowWorkspace(Window window);
 
 bool isWindow_Sticky(long workSpace, WinInfo*);
 bool isWindow_Dock(WinInfo*);

@@ -66,26 +66,34 @@ int main(int argc, char **argv) {
     const bool isWaylandPresent = getenv("WAYLAND_DISPLAY") &&
         getenv("WAYLAND_DISPLAY") [0];
     if (isWaylandPresent) {
-        cout << COLOR_YELLOW << "\ndox11cmd: Wayland desktop is detected."
-            << COLOR_NORMAL << endl;
+        cout << COLOR_YELLOW << "\ndox11cmd: Wayland desktop "
+            "is detected." << COLOR_NORMAL << endl;
     }
 
     // X11 Initialization.
     mDisplayHelper = new xDisplayHelper();
     mDisplay = mDisplayHelper->getDisplay();
     if (!mDisplay) {
-        cout << COLOR_RED << "\ndox11cmd: X11 Does not seem to be "
-            "available." << COLOR_NORMAL << endl;
+        cout << COLOR_RED << "\ndox11cmd: X11 Does not seem "
+            "to be available." << COLOR_NORMAL << endl;
         exit(1);
     }
 
     XSynchronize(mDisplay, 0);
     XSetErrorHandler(handleX11ErrorEvent);
 
-    // Execute users command.
+    // Shortcut if no user command provided.
+    if (mCmdString == "") {
+        doListStackedWindowNames();
+        XCloseDisplay(mDisplay);
+        return false;
+    }
+
+    // Else, execute users command.
     switch (distance(mCmdListStrings.begin(),
-            find(mCmdListStrings.begin(), mCmdListStrings.end(),
-        mCmdString))) {
+        find(mCmdListStrings.begin(), mCmdListStrings.end(),
+            mCmdString))) {
+
         case LIST:
             doListStackedWindowNames();
             break;
@@ -107,14 +115,13 @@ int main(int argc, char **argv) {
             break;
 
         default:
-            cout << COLOR_YELLOW <<
-                "\ndox11cmd: That\'s not a valid VERB." <<
-                COLOR_NORMAL << endl;
+            cout << COLOR_YELLOW << "\ndox11cmd: That\'s not "
+                "a valid VERB." << COLOR_NORMAL << endl;
             doDisplayUseage();
-            doListStackedWindowNames();
     }
 
     XCloseDisplay(mDisplay);
+    return false;
 }
 
 /**
@@ -147,9 +154,11 @@ void doListStackedWindowNames() {
     cout << COLOR_BLUE << "\nWindows in Stacked Order "
         "above Desktop:" << COLOR_NORMAL << endl;
 
-    cout << COLOR_GREEN << "\n---window---  Titlebar Name"
-        "                             WS   "
-        "---Position-- -----Size----  Attributes" <<
+    cout << endl << COLOR_GREEN <<
+        "---window---  Titlebar Name"
+        "                             WS  Map "
+        "---Position--  ----Size-----  "
+        "---Offset----  Attributes" <<
         COLOR_NORMAL << endl;
 
     Window* stackedWins;
@@ -158,13 +167,8 @@ void doListStackedWindowNames() {
 
     for (int i = numberOfStackedWins - 1; i >= 0; i--) {
         // Get window attributes.
-        XWindowAttributes windowAttributes;
-        windowAttributes.map_state = -1;
-        windowAttributes.width = -1;
-        windowAttributes.height = -1;
-        windowAttributes.x = -1;
-        windowAttributes.y = -1;
-
+        XWindowAttributes windowAttributes = { .x = -1, .y = -1,
+            .width = -1, .height = -1, .map_state = -1 };
         XGetWindowAttributes(mDisplay, stackedWins[i],
             &windowAttributes);
 
@@ -177,18 +181,18 @@ void doListStackedWindowNames() {
             DefaultRootWindow(mDisplay), 0, 0, &xCoord,
             &yCoord, &child_return);
 
-        // Get window title.
-        // Create a formatted title (name) c-string with a hard length,
-        // replacing unprintables with SPACE, padding right with SPACE,
-        // and preserving null terminator.
+        // Get window title, as char*, replacing unprintables
+        // with SPACE, & padding right with SPACE.
         char outputTitle[MAX_TITLE_STRING_LENGTH + 1];
         int outP = 0;
 
         XTextProperty titleBarName;
-        if (XGetWMName(mDisplay, stackedWins[i], &titleBarName) != 0) {
+        if (XGetWMName(mDisplay, stackedWins[i],
+            &titleBarName) != 0) {
             const char* nameP = (char*) titleBarName.value;
             const int nameL = strlen(nameP);
-            for (; outP < nameL && outP < MAX_TITLE_STRING_LENGTH; outP++) {
+            for (; outP < nameL && outP < MAX_TITLE_STRING_LENGTH;
+                outP++) {
                 outputTitle[outP] = isprint(*(nameP + outP)) ?
                     *(nameP + outP) : ' ';
             }
@@ -200,13 +204,13 @@ void doListStackedWindowNames() {
         }
         outputTitle[outP] = '\0';
 
-
         // Create a WinInfo struct.
         WinInfo* winInfoItem = (WinInfo*)
             malloc(sizeof(WinInfo));
 
         winInfoItem->id = stackedWins[i];
         winInfoItem->ws = getWindowWorkspace(stackedWins[i]);
+        winInfoItem->mapState = windowAttributes.map_state;
 
         winInfoItem->sticky = isWindow_Sticky(winInfoItem->ws,
             winInfoItem);
@@ -224,16 +228,19 @@ void doListStackedWindowNames() {
         winInfoItem->ya = yCoord - winInfoItem->y;
 
         // Log a WinInfo struct.
-        fprintf(stdout, "[0x%08lx]  %s  %2li  "
-            " %5d , %-5d %5d x %-5d  %s%s%s\n",
+        printf("[0x%08lx]  %s  %2i  %2i  %5i , %-5i  %5i , %-5i  "
+            "%5i , %-5i  %s%s%s\n",
             winInfoItem->id, outputTitle,
-            winInfoItem->ws,
+            winInfoItem->ws, winInfoItem->mapState,
             winInfoItem->xa, winInfoItem->ya,
             winInfoItem->w, winInfoItem->h,
+            winInfoItem->x, winInfoItem->y,
             winInfoItem->dock ? "dock " : "",
             winInfoItem->sticky ? "sticky " : "",
             winInfoItem->hidden ? "hidden" : "");
     }
+
+    cout << endl;
 }
 
 /**
@@ -416,8 +423,8 @@ getRootWindowProperty(Atom property, Window** windows) {
 /**
  * This method determines if a window is visible on a workspace.
  */
-long int getWindowWorkspace(Window window) {
-    long int result = 0;
+long getWindowWorkspace(Window window) {
+    long result = 0;
 
     Atom type;
     int format;
@@ -469,7 +476,7 @@ bool isWindow_Sticky(long workSpace, WinInfo* winInfoItem) {
         &nitems, &unusedBytes, &properties);
 
     if (type == XA_ATOM) {
-        for (unsigned long int i = 0; i < nitems; i++) {
+        for (unsigned long i = 0; i < nitems; i++) {
             char* nameString = XGetAtomName(mDisplay,
                 ((Atom*) (void*) properties) [i]);
             if (strcmp(nameString, "_NET_WM_STATE_STICKY") == 0) {
@@ -506,7 +513,8 @@ bool isWindow_Dock(WinInfo* winInfoItem) {
         for (int i = 0; (unsigned long)i < nitems; i++) {
             char* nameString = XGetAtomName(mDisplay,
                 ((Atom*) (void*) properties) [i]);
-            if (strcmp(nameString, "_NET_WM_WINDOW_TYPE_DOCK") == 0) {
+            if (strcmp(nameString,
+                "_NET_WM_WINDOW_TYPE_DOCK") == 0) {
                 result = true;
                 XFree(nameString);
                 break;
