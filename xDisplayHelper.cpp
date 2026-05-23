@@ -40,7 +40,7 @@ xDisplayHelper::xDisplayHelper() {
 
     // Check for session error.
     mSessionType = getenv("XDG_SESSION_TYPE");
-    if (strcmp(mSessionType, "x11") != 0) {
+    if (mSessionType && strcmp(mSessionType, "x11") != 0) {
         //cout << endl << XCOLOR_RED << "xDisplayHelper: No X11 "
         //    "Session type is detected, FATAL." <<
         //    XCOLOR_NORMAL << endl;
